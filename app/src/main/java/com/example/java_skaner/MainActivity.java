@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -46,6 +47,8 @@ import android.media.MediaScannerConnection;
 public class MainActivity extends AppCompatActivity {
 
     private Button writeBtn, readBtn;
+    private Button saveTxtButton, saveHtmlButton;
+
     private EditText input;
     private TextView text;
     private final ArrayList<Uri> imageUris = new ArrayList<>();
@@ -77,12 +80,46 @@ public class MainActivity extends AppCompatActivity {
 
         });
 
+        // dwa guziki zapisu - osobno do txt i html
+
+        Button saveTxtButton = new Button(this);
+        saveTxtButton.setText("Zapisz jako TXT");
+        saveTxtButton.setVisibility(View.GONE);
+        saveTxtButton.setOnClickListener(v -> {
+            String content = input.getText().toString();
+            writeToFile("plik.txt", content);
+        });
+
+        Button saveHtmlButton = new Button(this);
+        saveHtmlButton.setText("Zapisz jako HTML");
+        saveHtmlButton.setVisibility(View.GONE);
+        saveHtmlButton.setOnClickListener(v -> {
+            String content = input.getText().toString();
+            String html = "<html><body><pre style='color: black; font-size: 16px;'>" +
+                    content +
+                    "</pre></body></html>";
+            writeToFile("plik.html", html);
+        });
+
+        binding.mainContainer.addView(saveTxtButton);
+        binding.mainContainer.addView(saveHtmlButton);
+
+
         // Przycisk odczytu
         readBtn.setOnClickListener(v -> {
             String content = readFromFile("file.txt");
             text.setText(content);
             Toast.makeText(this, "Odczytano plik.", Toast.LENGTH_SHORT).show();
         });
+
+        // nowy - przycisk wyczyszczenia
+        Button clearButton = new Button(this);
+        clearButton.setText("Nowy dokument");
+        clearButton.setOnClickListener(v -> {
+            input.setText("");
+            text.setText("");
+        });
+        binding.mainContainer.addView(clearButton);
 
         // Konfiguracja nawigacji
         BottomNavigationView navView = findViewById(R.id.nav_view);
@@ -153,10 +190,14 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Wykryto tekst:\n" + resultText, Toast.LENGTH_LONG).show();
 
                 try {
-                    File resultFile = new File(getFilesDir(), "recognized_text.txt");
+                    /*File resultFile = new File(getFilesDir(), "recognized_text.txt");
                     FileWriter writer = new FileWriter(resultFile);
                     writer.write(resultText);
-                    writer.close();
+                    writer.close();*/
+
+                    // NIE zapisuj jeszcze pliku – tylko pokaż tekst w edytorze.
+                    input.setText(resultText);
+
                 } catch (Exception e) {
                     Log.e("OCR", "Błąd zapisu pliku", e);
                 }
