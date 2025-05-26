@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Skaner_zapis_odczyt</string>
+    <string name="title_home">Home</string>
+    <string name="title_dashboard">Dashboard</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="hint_enter_text">Wpisz tekst</string>
+    <string name="button_save">Zapisz do pliku</string>
+    <string name="button_read">Czytaj z pliku</string>
+</resources>
