@@ -1,10 +1,13 @@
 package com.example.java_skaner;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.text.InputType;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -15,6 +18,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.IntentSenderRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -32,28 +36,44 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 
 import android.os.Environment;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.function.Consumer;
+
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.pdf.PdfDocument;
+
 import android.media.MediaScannerConnection;
 
 public class MainActivity extends AppCompatActivity {
 
-    private Button writeBtn, readBtn;
-    private Button saveTxtButton, saveHtmlButton;
+    private Button readBtn;
+    private Button saveTxtButton, saveHtmlButton, savePdfButton;
 
     private EditText input;
     private TextView text;
     private final ArrayList<Uri> imageUris = new ArrayList<>();
     private ActivityResultLauncher<IntentSenderRequest> scannerLauncher;
     private ActivityMainBinding binding;
+
+    private boolean isValidFileName(String fileName) {
+        return !fileName.isEmpty() && fileName.matches("^[^\\\\/:*?\"<>|]+$");
+    }
+
+    private static final int READ_REQUEST_CODE = 42;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,35 +82,21 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        // Przypisz widoki
-        writeBtn = findViewById(R.id.write);
+        // assign views
         readBtn = findViewById(R.id.read);
         input = findViewById(R.id.input);
         text = findViewById(R.id.text);
 
-        // Przycisk zapisu
-        writeBtn.setOnClickListener(v -> {
-            String content = input.getText().toString();
-            Toast.makeText(this, "Zapisuję: " + content, Toast.LENGTH_SHORT).show();
-            writeToFile("file.txt", content);
-            String htmlContent = "<html><body><pre style='color: black; font-size: 16px;'>" +
-                    content +
-                    "</pre></body></html>";
-            writeToFile("file.html", htmlContent);
-
-        });
-
-        // dwa guziki zapisu - osobno do txt i html
-
-        Button saveTxtButton = new Button(this);
+        // two buttons for txt and html save
+        saveTxtButton = new Button(this);
         saveTxtButton.setText("Zapisz jako TXT");
         saveTxtButton.setVisibility(View.GONE);
         saveTxtButton.setOnClickListener(v -> {
             String content = input.getText().toString();
-            writeToFile("plik.txt", content);
+            showSaveFileDialog(".txt", fileName -> writeToFile(fileName, content));
         });
 
-        Button saveHtmlButton = new Button(this);
+        saveHtmlButton = new Button(this);
         saveHtmlButton.setText("Zapisz jako HTML");
         saveHtmlButton.setVisibility(View.GONE);
         saveHtmlButton.setOnClickListener(v -> {
@@ -98,30 +104,50 @@ public class MainActivity extends AppCompatActivity {
             String html = "<html><body><pre style='color: black; font-size: 16px;'>" +
                     content +
                     "</pre></body></html>";
-            writeToFile("plik.html", html);
+            showSaveFileDialog(".html", fileName->writeToFile(fileName, html));
+        });
+
+        savePdfButton = new Button(this);
+        savePdfButton.setText("Zapisz jako PDF");
+        savePdfButton.setVisibility(View.GONE);
+        savePdfButton.setOnClickListener(v -> {
+            String content = input.getText().toString();
+            showSaveFileDialog(".pdf", fileName -> writeToPdfFile(fileName, content));
         });
 
         binding.mainContainer.addView(saveTxtButton);
         binding.mainContainer.addView(saveHtmlButton);
+        binding.mainContainer.addView(savePdfButton);
 
 
-        // Przycisk odczytu
+        // read button
         readBtn.setOnClickListener(v -> {
-            String content = readFromFile("file.txt");
-            text.setText(content);
-            Toast.makeText(this, "Odczytano plik.", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.setType("*/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            String[] mimeTypes = {"text/plain", "text/html", "application/pdf"};
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+            startActivityForResult(intent, READ_REQUEST_CODE);
         });
 
-        // nowy - przycisk wyczyszczenia
+        // clear button
         Button clearButton = new Button(this);
-        clearButton.setText("Nowy dokument");
+        clearButton.setText("Wyczyść dokument");
         clearButton.setOnClickListener(v -> {
             input.setText("");
             text.setText("");
         });
         binding.mainContainer.addView(clearButton);
 
-        // Konfiguracja nawigacji
+        // open files from phone
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.setType("*/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        String[] mimeTypes = {"text/plain", "text/html", "application/pdf"};
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+        startActivityForResult(intent, READ_REQUEST_CODE);
+
+        // nav configuration
         BottomNavigationView navView = findViewById(R.id.nav_view);
         AppBarConfiguration appBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.navigation_home, R.id.navigation_dashboard, R.id.navigation_notifications)
@@ -130,7 +156,7 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
         NavigationUI.setupWithNavController(binding.navView, navController);
 
-        // Konfiguracja skanera
+        // scanner configration
         GmsDocumentScannerOptions options = new GmsDocumentScannerOptions.Builder()
                 .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
                 .setGalleryImportAllowed(true)
@@ -153,7 +179,7 @@ public class MainActivity extends AppCompatActivity {
 
                             if (scanningResult.getPdf() != null) {
                                 Uri pdfUri = scanningResult.getPdf().getUri();
-                                savePdfToFile(pdfUri);
+                                //savePdfToFile(pdfUri);
                             }
 
                             Toast.makeText(this, "Zeskanowano " + imageUris.size() + " stron(y)", Toast.LENGTH_SHORT).show();
@@ -178,7 +204,83 @@ public class MainActivity extends AppCompatActivity {
         binding.mainContainer.addView(scanButton);
     }
 
-    // Zapis rozpoznanego tekstu
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode == READ_REQUEST_CODE && resultCode == RESULT_OK){
+            if(data != null){
+                Uri uri = data.getData();
+                String content = readTextFromUri(uri);
+                text.setText(content);
+            }
+        }
+    }
+
+    // read from txt and html files
+    private String readTextFromUri(Uri uri){
+        StringBuilder builder = new StringBuilder();
+        try (InputStream inputStream = getContentResolver().openInputStream(uri);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))){
+            String line;
+            while ((line=reader.readLine())!=null){
+                builder.append(line).append("\n");
+            }
+
+            //TextView textView = findViewById(R.id.text);
+            //textView.setText(builder.toString());
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "Błąd odczytu: " + e.getMessage();
+            //Toast.makeText(this, "Błąd odczytu: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+        return builder.toString();
+    }
+
+
+    // choosing file name
+    private void showSaveFileDialog(String extension, Consumer<String> onFileNameEntered){
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Wpisz nazwę pliku: ");
+
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setHint("Nazwa pliku bez rozszerzenia");
+        builder.setView(input);
+
+        // zapis pliku z walidacją nazwy
+        builder.setPositiveButton("Zapisz", null);
+
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(d -> {
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            positive.setOnClickListener(view -> {
+                String fileName = input.getText().toString().trim();
+                if (fileName.isEmpty()) {
+                    input.setError("Nazwa pliku nie może być pusta!");
+                    return;
+                }
+
+                if (!isValidFileName(fileName)) {
+                    input.setError("Nazwa zawiera niedozwolone znaki: \\ / : * ? \" < > |");
+                    return;
+                }
+
+                if (!fileName.endsWith(extension)) {
+                    fileName += extension;
+                }
+
+                dialog.dismiss();
+                onFileNameEntered.accept(fileName);
+            });
+        });
+
+        dialog.show();
+
+        //builder.setNegativeButton("Anuluj", (dialog, which)->dialog.cancel());
+        //builder.show();
+    }
+
+
+    // showing recognized text
     private void recognizeTextFromImage(Uri imageUri) {
         try {
             InputImage image = InputImage.fromFilePath(this, imageUri);
@@ -187,6 +289,10 @@ public class MainActivity extends AppCompatActivity {
             recognizer.process(image).addOnSuccessListener(visionText -> {
                 String resultText = visionText.getText();
                 input.setText(resultText);  // zapis tekstu do edittext
+
+                saveTxtButton.setVisibility(View.VISIBLE);
+                saveHtmlButton.setVisibility(View.VISIBLE);
+                savePdfButton.setVisibility(View.VISIBLE);
                 Toast.makeText(this, "Wykryto tekst:\n" + resultText, Toast.LENGTH_LONG).show();
 
                 try {
@@ -210,8 +316,49 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Zapis PDF
-    private void savePdfToFile(Uri pdfUri) {
+    // save as pdf
+    private void writeToPdfFile(String fileName, String content){
+        PdfDocument pdfDocument = new PdfDocument();
+        Paint paint = new Paint();
+        PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842,1).create();
+        PdfDocument.Page page = pdfDocument.startPage(pageInfo);
+
+        Canvas canvas = page.getCanvas();
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(12f);
+
+        int x = 10;
+        int y = 25;
+        for (String line: content.split("\n")){
+            canvas.drawText(line, x, y, paint);
+            y += paint.descent() - paint.ascent();
+        }
+        pdfDocument.finishPage(page);
+
+        File path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        File file = new File(path, fileName);
+
+        try{
+            if (!path.exists()){
+                path.mkdirs();
+            }
+
+        FileOutputStream fos = new FileOutputStream(file);
+        pdfDocument.writeTo(fos);
+        pdfDocument.close();
+        fos.close();
+
+        MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()}, null, null);
+        Toast.makeText(this, "Zapisano PDF: " + file.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+
+        }catch(IOException e){
+            e.printStackTrace();
+            Toast.makeText(this, "Błąd zapisu PDF: "+e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // PDF
+    /*private void savePdfToFile(Uri pdfUri) {
         try {
             InputStream inputStream = getContentResolver().openInputStream(pdfUri);
             if (inputStream != null) {
@@ -229,9 +376,9 @@ public class MainActivity extends AppCompatActivity {
             Log.e("PDF", "Błąd zapisu PDF", e);
             Toast.makeText(this, "Błąd zapisu PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
-    }
+    }*/
 
-    // Zapis tekstu
+    // save to the txt/html/pdf file
     public void writeToFile(String fileName, String content) {
         //File path = getApplicationContext().getFilesDir();
         File path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
@@ -245,6 +392,7 @@ public class MainActivity extends AppCompatActivity {
             writer.write(content.getBytes());
             writer.close();
 
+
             MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()}, null, (path1, uri)->Log.i("Zapis", "Plik zindeksowany: " + uri));
 
             Toast.makeText(getApplicationContext(), "Zapisano do pliku " + fileName, Toast.LENGTH_SHORT).show();
@@ -253,6 +401,8 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(getApplicationContext(), "Błąd zapisu" + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
+
+
 
     // Odczyt tekstu
     public String readFromFile(String fileName) {

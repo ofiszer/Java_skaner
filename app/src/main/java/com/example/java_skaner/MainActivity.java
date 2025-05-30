@@ -44,6 +44,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.util.ArrayList;
 
 import android.os.Environment;
@@ -115,10 +116,22 @@ public class MainActivity extends AppCompatActivity {
             showSaveFileDialog(".pdf", fileName -> writeToPdfFile(fileName, content));
         });
 
+
+        Button saveChangesBtn = new Button(this);
+        saveChangesBtn.setText("Zapisz zmiany");
+        saveChangesBtn.setOnClickListener(v->{
+            if (currentFileUri != null){
+                String editedContent = input.getText().toString();
+                writeTextToUri(currentFileUri, editedContent);
+            } else {
+                Toast.makeText(this, "Nie wybrano pliku do edycji.", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         binding.mainContainer.addView(saveTxtButton);
         binding.mainContainer.addView(saveHtmlButton);
         binding.mainContainer.addView(savePdfButton);
-
+        binding.mainContainer.addView(saveChangesBtn);
 
         // read button
         readBtn.setOnClickListener(v -> {
@@ -187,7 +200,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
 
-        // Przycisk dynamicznie dodany
         Button scanButton = new Button(this);
         scanButton.setText("Skanuj dokument");
 
@@ -204,17 +216,33 @@ public class MainActivity extends AppCompatActivity {
         binding.mainContainer.addView(scanButton);
     }
 
+    private Uri currentFileUri = null;
+
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if(requestCode == READ_REQUEST_CODE && resultCode == RESULT_OK){
             if(data != null){
-                Uri uri = data.getData();
-                String content = readTextFromUri(uri);
-                text.setText(content);
+                //Uri uri = data.getData();
+                currentFileUri = data.getData();
+                String content = readTextFromUri(currentFileUri);
+                input.setText(content);
             }
         }
     }
 
+    private void writeTextToUri(Uri uri, String content){
+        try{
+            OutputStream outputStream = getContentResolver().openOutputStream(uri, "wt");
+            if (outputStream != null){
+                outputStream.write(content.getBytes());
+                outputStream.close();
+                Toast.makeText(this, "Zapisano zmiany.", Toast.LENGTH_SHORT).show();
+            }
+        }catch(Exception e){
+            e.printStackTrace();
+            Toast.makeText(this, "Błąd edycji: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
     // read from txt and html files
     private String readTextFromUri(Uri uri){
         StringBuilder builder = new StringBuilder();
