@@ -3,15 +3,20 @@ package com.example.java_skaner;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.graphics.Bitmap;
 import android.graphics.pdf.PdfDocument;
+import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.text.InputType;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -169,7 +174,7 @@ public class MainActivity extends AppCompatActivity {
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
         NavigationUI.setupWithNavController(binding.navView, navController);
 
-        // scanner configration
+        // scanner configuration
         GmsDocumentScannerOptions options = new GmsDocumentScannerOptions.Builder()
                 .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
                 .setGalleryImportAllowed(true)
@@ -220,12 +225,56 @@ public class MainActivity extends AppCompatActivity {
 
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if(requestCode == READ_REQUEST_CODE && resultCode == RESULT_OK){
-            if(data != null){
-                //Uri uri = data.getData();
-                currentFileUri = data.getData();
+        if(requestCode == READ_REQUEST_CODE && resultCode == RESULT_OK && data != null){
+            currentFileUri = data.getData();
+
+            String type = getContentResolver().getType(currentFileUri);
+            if (type == null || (!type.equals("text/plain") && !type.equals("text/html") && !type.equals("application/pdf"))){
+                String path = currentFileUri.getPath();
+                if (path != null) {
+                    path = path.toLowerCase();
+                    if (path.endsWith(".pdf")) {
+                        type = "application/pdf";
+                    } else if (path.endsWith(".html") || path.endsWith(".htm")) {
+                        type = "text/html";
+                    } else if (path.endsWith(".txt")) {
+                        type = "text/plain";
+                    }
+                }
+            }
+            if ("text/plain".equals(type) || "text/html".equals(type)) {
                 String content = readTextFromUri(currentFileUri);
+                input.setVisibility(View.VISIBLE);
                 input.setText(content);
+
+                ImageView imageView = findViewById(R.id.pdfView);
+                imageView.setVisibility(View.GONE);
+            } else if ("application/pdf".equals(type)){
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP){
+                    try{
+                        ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(currentFileUri, "r");
+                        PdfRenderer renderer = new PdfRenderer(pfd);
+                        PdfRenderer.Page page = renderer.openPage(0);
+
+                        Bitmap bitmap = Bitmap.createBitmap(page.getWidth(), page.getHeight(), Bitmap.Config.ARGB_8888);
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+
+                        ImageView imageView = findViewById(R.id.pdfView);
+                        imageView.setImageBitmap(bitmap);
+                        imageView.setVisibility(View.VISIBLE);
+
+                        input.setVisibility(View.GONE);
+
+                        page.close();
+                        renderer.close();
+                        pfd.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        Toast.makeText(this, "Błąd podczas otwierania pliku PDF", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            } else {
+             Toast.makeText(this, "Nieobsługiwany typ pliku", Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -316,7 +365,7 @@ public class MainActivity extends AppCompatActivity {
 
             recognizer.process(image).addOnSuccessListener(visionText -> {
                 String resultText = visionText.getText();
-                input.setText(resultText);  // zapis tekstu do edittext
+                input.setText(resultText);  // save text into edittext
 
                 saveTxtButton.setVisibility(View.VISIBLE);
                 saveHtmlButton.setVisibility(View.VISIBLE);
@@ -329,7 +378,7 @@ public class MainActivity extends AppCompatActivity {
                     writer.write(resultText);
                     writer.close();*/
 
-                    // NIE zapisuj jeszcze pliku – tylko pokaż tekst w edytorze.
+                    // Don't save text yet - show it in the editor
                     input.setText(resultText);
 
                 } catch (Exception e) {
