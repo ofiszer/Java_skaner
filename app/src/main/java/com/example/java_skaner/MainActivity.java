@@ -67,7 +67,7 @@ import android.media.MediaScannerConnection;
 public class MainActivity extends AppCompatActivity {
 
     private Button readBtn;
-    private Button saveTxtButton, saveHtmlButton, savePdfButton;
+    private Button saveTxtButton, saveHtmlButton, savePdfButton, saveChangesBtn;
 
     private EditText input;
     private TextView text;
@@ -122,8 +122,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        Button saveChangesBtn = new Button(this);
+        saveChangesBtn = new Button(this);
         saveChangesBtn.setText("Zapisz zmiany");
+        //saveChangesBtn.setVisibility(View.GONE);
         saveChangesBtn.setOnClickListener(v->{
             if (currentFileUri != null){
                 String editedContent = input.getText().toString();
@@ -143,9 +144,9 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.setType("*/*");
             intent.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(intent, READ_REQUEST_CODE);
             String[] mimeTypes = {"text/plain", "text/html", "application/pdf"};
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
-            startActivityForResult(intent, READ_REQUEST_CODE);
         });
 
         // clear button
@@ -158,12 +159,12 @@ public class MainActivity extends AppCompatActivity {
         binding.mainContainer.addView(clearButton);
 
         // open files from phone
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("*/*");
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        //Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        //intent.setType("*/*");
+        /*intent.addCategory(Intent.CATEGORY_OPENABLE);
         String[] mimeTypes = {"text/plain", "text/html", "application/pdf"};
         intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
-        startActivityForResult(intent, READ_REQUEST_CODE);
+        startActivityForResult(intent, READ_REQUEST_CODE);*/
 
         // nav configuration
         BottomNavigationView navView = findViewById(R.id.nav_view);
@@ -246,7 +247,7 @@ public class MainActivity extends AppCompatActivity {
                 String content = readTextFromUri(currentFileUri);
                 input.setVisibility(View.VISIBLE);
                 input.setText(content);
-
+                saveChangesBtn.setVisibility(View.VISIBLE);
                 ImageView imageView = findViewById(R.id.pdfView);
                 imageView.setVisibility(View.GONE);
             } else if ("application/pdf".equals(type)){
@@ -358,7 +359,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     // showing recognized text
-    private void recognizeTextFromImage(Uri imageUri) {
+    /*private void recognizeTextFromImage(Uri imageUri) {
         try {
             InputImage image = InputImage.fromFilePath(this, imageUri);
             TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
@@ -367,16 +368,17 @@ public class MainActivity extends AppCompatActivity {
                 String resultText = visionText.getText();
                 input.setText(resultText);  // save text into edittext
 
+                saveChangesBtn.setVisibility(View.GONE);
                 saveTxtButton.setVisibility(View.VISIBLE);
                 saveHtmlButton.setVisibility(View.VISIBLE);
                 savePdfButton.setVisibility(View.VISIBLE);
                 Toast.makeText(this, "Wykryto tekst:\n" + resultText, Toast.LENGTH_LONG).show();
 
                 try {
-                    /*File resultFile = new File(getFilesDir(), "recognized_text.txt");
-                    FileWriter writer = new FileWriter(resultFile);
-                    writer.write(resultText);
-                    writer.close();*/
+                    //File resultFile = new File(getFilesDir(), "recognized_text.txt");
+                    //FileWriter writer = new FileWriter(resultFile);
+                    //writer.write(resultText);
+                    //writer.close();
 
                     // Don't save text yet - show it in the editor
                     input.setText(resultText);
@@ -391,7 +393,33 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Toast.makeText(this, "Błąd wczytywania obrazu", Toast.LENGTH_SHORT).show();
         }
+    }*/
+
+    private void recognizeTextFromImage(Uri imageUri) {
+        try {
+            InputImage image = InputImage.fromFilePath(this, imageUri);
+            TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+
+            recognizer.process(image).addOnSuccessListener(visionText -> {
+                String resultText = visionText.getText();
+                input.setText(resultText);  // save text into edittext
+                
+                saveChangesBtn.setVisibility(View.GONE);
+
+                saveTxtButton.setVisibility(View.VISIBLE);
+                saveHtmlButton.setVisibility(View.VISIBLE);
+                savePdfButton.setVisibility(View.VISIBLE);
+
+                Toast.makeText(this, "Wykryto tekst:\n" + resultText, Toast.LENGTH_LONG).show();
+            }).addOnFailureListener(e -> {
+                Toast.makeText(this, "Błąd OCR: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            });
+
+        } catch (Exception e) {
+            Toast.makeText(this, "Błąd wczytywania obrazu", Toast.LENGTH_SHORT).show();
+        }
     }
+
 
     // save as pdf
     private void writeToPdfFile(String fileName, String content){
